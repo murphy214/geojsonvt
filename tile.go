@@ -63,6 +63,14 @@ func CreateTile(features []Feature, tileid m.TileID, options Config) Tile {
 	return tile
 }
 
+func validateGeometry(layerwrite vt.LayerWrite) bool {
+	if len(layerwrite.Cursor.Geometry) >= 3 {
+		return layerwrite.Cursor.Geometry[3] != 2
+	} else {
+		return true
+	}
+}
+
 // makes a tile for a geojson vt implementation
 func (tile Tile) Marshal() []byte {
 
@@ -120,7 +128,28 @@ func (tile Tile) Marshal() []byte {
 				newlist[pos] = tile.addLine(i, tolerance, false, false, extent, z2, tx, ty)
 			}
 			if len(newlist) > 0 {
-				layerwrite.Cursor.MakeMultiLine(newlist)
+				/*
+				boolval := false
+				for _,i := range newlist {
+					if len(i) <= 2 {
+						boolval = true
+					}
+				}
+				if boolval {
+					fmt.Println(newlist)
+				}
+				*/
+				newlist2 := [][][]int32{}
+				for _,i := range newlist {
+					if len(i) > 2 {
+						newlist2 = append(newlist2,i)
+					}
+				}
+				if len(newlist2) > 0{
+					layerwrite.Cursor.MakeMultiLine(newlist2)
+
+				}
+
 			}
 			geomtype = 2
 		} else if feature.Type == "Polygon" {
@@ -154,7 +183,7 @@ func (tile Tile) Marshal() []byte {
 				id = int(vv.Int())
 			}
 		}
-		if len(layerwrite.Cursor.Geometry) > 0 {
+		if len(layerwrite.Cursor.Geometry) > 0 && layerwrite.Cursor.Count != 0 && validateGeometry(layerwrite) {
 			count++
 			layerwrite.AddFeatureRaw(id, geomtype, layerwrite.Cursor.Geometry, feature.Tags)
 		}
@@ -240,7 +269,7 @@ func (tile Tile) AddFeature(feature Feature) {
 			id = int(vv.Int())
 		}
 	}
-	if len(tile.LayerWrite.Cursor.Geometry) > 0 {
+	if len(tile.LayerWrite.Cursor.Geometry) > 0 && tile.LayerWrite.Cursor.Count != 0 {
 		tile.LayerWrite.AddFeatureRaw(id, geomtype, tile.LayerWrite.Cursor.Geometry, feature.Tags)
 	}
 }
