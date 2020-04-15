@@ -42,11 +42,42 @@ func (slice *Slice) IntersectY(ax, ay, bx, by, y float64) float64 {
 	return t
 }
 
+
+func (slice *Slice) IntersectXZ(ax, ay, bx, by,am,bm, x float64) float64 {
+	t := (x - ax) / (bx - ax)
+	slice.Slice[slice.Pos] = x
+	slice.Slice[slice.Pos+1] = ay + (by-ay)*t
+	slice.Slice[slice.Pos+2] = am + (bm-am)*t
+	slice.Slice[slice.Pos+3] = 1
+	slice.Pos += 4
+	return t
+}
+
+func (slice *Slice) IntersectYZ(ax, ay, bx, by, y float64) float64 {
+	t := (y - ay) / (by - ay)
+	slice.Slice[slice.Pos] = ax + (bx-ax)*t
+	slice.Slice[slice.Pos+1] = y
+	slice.Slice[slice.Pos+2] = am + (bm-am)*t
+	slice.Slice[slice.Pos+3] = 1
+	slice.Pos += 4
+	return t
+}
+
+
 func (slice *Slice) Intersect(ax, ay, bx, by, val float64) float64 {
 	if slice.Axis == 0 {
 		return slice.IntersectX(ax, ay, bx, by, val)
 	} else if slice.Axis == 1 {
 		return slice.IntersectY(ax, ay, bx, by, val)
+	}
+	return 0.0
+}
+
+func (slice *Slice) IntersectM(ax, ay,am, bx, by,bm, val float64) float64 {
+	if slice.Axis == 0 {
+		return slice.IntersectXM(ax, ay, bx, by,am,bm, val)
+	} else if slice.Axis == 1 {
+		return slice.IntersectYM(ax, ay, bx, by,am,bm, val)
 	}
 	return 0.0
 }
@@ -57,6 +88,16 @@ func (slice *Slice) AddPoint(x, y, z float64) {
 	slice.Slice[slice.Pos+2] = z
 	slice.Pos += 3
 }
+
+
+func (slice *Slice) AddPointM(x, y,m ,z float64) {
+	slice.Slice[slice.Pos] = x
+	slice.Slice[slice.Pos+1] = y
+	slice.Slice[slice.Pos+2] = m
+	slice.Slice[slice.Pos+3] = z
+	slice.Pos += 3
+}
+
 
 func (input *ClipGeom) clipLine() {
 	slice := NewSlice(len(input.Geom)*3, input.Axis)
@@ -137,6 +178,92 @@ func (input *ClipGeom) clipLine() {
 	}
 
 }
+
+//
+func (input *ClipGeom) clipLineM() {
+	slice := NewSlice(len(input.Geom)*4, input.Axis)
+	//lenn := 0
+	//var segLen, t int
+	var ax, ay,am, az, bx, by, bm,a, b float64
+	k1, k2 := input.K1, input.K2
+	for i := 0; i < len(input.Geom)-3; i += 3 {
+		ax = input.Geom[i]
+		ay = input.Geom[i+1]
+		am = input.Geom[i+2]
+		az = input.Geom[i+3]
+		bx = input.Geom[i+3]
+		by = input.Geom[i+5]
+		bm = input.Geom[i+6]
+
+		if input.Axis == 0 {
+			a = ax
+			b = bx
+		} else if input.Axis == 1 {
+			a = ay
+			b = by
+		}
+		exited := false
+
+		if a < k1 {
+			// ---|-->  | (line enters the clip region from the left)
+			if b >= k1 {
+				slice.IntersectM(ax, ay, bx, by,am,bm, k1)
+				//if (trackMetrics) slice.start = len + segLen * t;
+			}
+		} else if a >= k2 {
+			// |  <--|--- (line enters the clip region from the right)
+			if b < k2 {
+				slice.IntersectM(ax, ay, bx, by,am,bm, k2)
+			}
+		} else {
+			slice.AddPoint(ax, ay,am, az)
+		}
+		if b < k1 && a >= k1 {
+			// <--|---  | or <--|-----|--- (line exits the clip region on the left)
+			slice.Intersect(ax, ay, bx, by,am,bm k1)
+			exited = true
+		}
+		if b > k2 && a <= k2 {
+			// |  ---|--> or ---|-----|--> (line exits the clip region on the right)
+			slice.Intersect(ax, ay, bx, by,am,bm, k2)
+			exited = true
+		}
+
+		if !input.IsPolygon && exited {
+			input.NewGeom = append(input.NewGeom, slice.Slice[:slice.Pos])
+			slice = NewSlice(len(input.Geom)*4, input.Axis)
+		}
+
+	}
+
+	// add the last point
+	last := len(input.Geom) - 4
+	ax = input.Geom[last]
+	ay = input.Geom[last+1]
+	am = input.Geom[last+2]
+	az = input.Geom[last+3]
+	if input.Axis == 0 {
+		a = ax
+	} else if input.Axis == 1 {
+		a = ay
+	}
+	if a >= k1 && a <= k2 {
+		slice.AddPointM(ax, ay,am, az)
+	}
+
+	// close the polygon if its endpoints are not the same after clipping
+	last = len(slice.Slice) - 3
+	if input.IsPolygon && last >= 3 && (slice.Slice[last] != slice.Slice[0] || slice.Slice[last+1] != slice.Slice[1]) {
+		slice.AddPointM(slice.Slice[0], slice.Slice[1], slice.Slice[2],slide.Slice[3])
+	}
+
+	if slice.Pos > 0 {
+		//fmt.Println(slice)
+		input.NewGeom = append(input.NewGeom, slice.Slice[:slice.Pos])
+	}
+
+}
+
 
 // clipping points
 func clipPoints(geometry []float64, k1, k2 float64, axis int) []float64 {

@@ -185,10 +185,74 @@ func convertLine(ring [][]float64, tolerance float64, isPolygon bool) []float64 
 	return out.Slice
 }
 
+
+func convertLineM(ring [][]float64, tolerance float64, isPolygon bool) []float64 {
+	var x0, y0 float64
+	size := 0.0
+	out := NewSlice(len(ring)*3, 0)
+	for j := 0; j < len(ring); j++ {
+		x := projectX(ring[j][0])
+		y := projectY(ring[j][1])
+		z := ring[j][2]
+		out.AddPointM(x, y, z, 0)
+
+		if j > 0 {
+			if isPolygon {
+				size += (x0*y - x*y0) / 2 // area
+			} else {
+				size += math.Sqrt(math.Pow(x-x0, 2) + math.Pow(y-y0, 2)) // length
+			}
+		}
+		x0 = x
+		y0 = y
+	}
+
+	last := out.Pos - 4
+	out.Slice[3] = 1
+	var simplify func(coords []float64, first, last int, sqTolerance float64)
+	var first int
+	simplify = func(coords []float64, first, last int, sqTolerance float64) {
+		var maxSqDist = sqTolerance
+		var index int
+
+		ax := coords[first]
+		ay := coords[first+1]
+		bx := coords[last]
+		by := coords[last+1]
+
+		for i := first + 4; i < last; i += 4 {
+			var d = getSqSegDist(coords[i], coords[i+1], ax, ay, bx, by)
+			if d > maxSqDist {
+				index = i
+				maxSqDist = d
+			}
+		}
+
+		if maxSqDist > sqTolerance {
+			if index-first > 4 {
+				simplify(coords, first, index, sqTolerance)
+			}
+			coords[index+3] = maxSqDist
+			if last-index > 4 {
+				simplify(coords, index, last, sqTolerance)
+			}
+		}
+	}
+	simplify(out.Slice, first, last, tolerance)
+	out.Slice[last+3] = 1
+	return out.Slice
+}
+
+
+
 func convertLines(rings [][][]float64, tolerance float64, isPolygon bool) [][]float64 {
 	out := make([][]float64, len(rings))
 	for pos, ring := range rings {
-		out[pos] = convertLine(ring, tolerance, isPolygon)
+		if len(ring[0]) == 3 {
+			out[pos] = converLineM(ring,tolerance,isPolygon)
+		} else {
+			out[pos] = convertLine(ring, tolerance, isPolygon)
+		}
 	}
 	return out
 }
