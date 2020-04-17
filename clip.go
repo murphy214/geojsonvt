@@ -2,6 +2,7 @@ package geojsonvt
 
 import (
 	m "github.com/murphy214/mercantile"
+	"fmt"
 )
 
 type ClipGeom struct {
@@ -43,7 +44,7 @@ func (slice *Slice) IntersectY(ax, ay, bx, by, y float64) float64 {
 }
 
 
-func (slice *Slice) IntersectXZ(ax, ay, bx, by,am,bm, x float64) float64 {
+func (slice *Slice) IntersectXM(ax, ay,am, bx, by,bm, x float64) float64 {
 	t := (x - ax) / (bx - ax)
 	slice.Slice[slice.Pos] = x
 	slice.Slice[slice.Pos+1] = ay + (by-ay)*t
@@ -53,7 +54,7 @@ func (slice *Slice) IntersectXZ(ax, ay, bx, by,am,bm, x float64) float64 {
 	return t
 }
 
-func (slice *Slice) IntersectYZ(ax, ay, bx, by, y float64) float64 {
+func (slice *Slice) IntersectYM(ax, ay,am, bx, by,bm, y float64) float64 {
 	t := (y - ay) / (by - ay)
 	slice.Slice[slice.Pos] = ax + (bx-ax)*t
 	slice.Slice[slice.Pos+1] = y
@@ -75,9 +76,9 @@ func (slice *Slice) Intersect(ax, ay, bx, by, val float64) float64 {
 
 func (slice *Slice) IntersectM(ax, ay,am, bx, by,bm, val float64) float64 {
 	if slice.Axis == 0 {
-		return slice.IntersectXM(ax, ay, bx, by,am,bm, val)
+		return slice.IntersectXM(ax, ay,am, bx, by,bm, val)
 	} else if slice.Axis == 1 {
-		return slice.IntersectYM(ax, ay, bx, by,am,bm, val)
+		return slice.IntersectYM(ax, ay,am, bx, by,bm, val)
 	}
 	return 0.0
 }
@@ -95,7 +96,7 @@ func (slice *Slice) AddPointM(x, y,m ,z float64) {
 	slice.Slice[slice.Pos+1] = y
 	slice.Slice[slice.Pos+2] = m
 	slice.Slice[slice.Pos+3] = z
-	slice.Pos += 3
+	slice.Pos += 4
 }
 
 
@@ -176,6 +177,7 @@ func (input *ClipGeom) clipLine() {
 		//fmt.Println(slice)
 		input.NewGeom = append(input.NewGeom, slice.Slice[:slice.Pos])
 	}
+	
 
 }
 
@@ -186,12 +188,12 @@ func (input *ClipGeom) clipLineM() {
 	//var segLen, t int
 	var ax, ay,am, az, bx, by, bm,a, b float64
 	k1, k2 := input.K1, input.K2
-	for i := 0; i < len(input.Geom)-3; i += 3 {
+	for i := 0; i < len(input.Geom)-4; i += 4 {
 		ax = input.Geom[i]
 		ay = input.Geom[i+1]
 		am = input.Geom[i+2]
 		az = input.Geom[i+3]
-		bx = input.Geom[i+3]
+		bx = input.Geom[i+4]
 		by = input.Geom[i+5]
 		bm = input.Geom[i+6]
 
@@ -207,25 +209,25 @@ func (input *ClipGeom) clipLineM() {
 		if a < k1 {
 			// ---|-->  | (line enters the clip region from the left)
 			if b >= k1 {
-				slice.IntersectM(ax, ay, bx, by,am,bm, k1)
+				slice.IntersectM(ax, ay,am, bx, by,bm, k1)
 				//if (trackMetrics) slice.start = len + segLen * t;
 			}
 		} else if a >= k2 {
 			// |  <--|--- (line enters the clip region from the right)
 			if b < k2 {
-				slice.IntersectM(ax, ay, bx, by,am,bm, k2)
+				slice.IntersectM(ax, ay, am,bx, by,bm, k2)
 			}
 		} else {
-			slice.AddPoint(ax, ay,am, az)
+			slice.AddPointM(ax, ay,am, az)
 		}
 		if b < k1 && a >= k1 {
 			// <--|---  | or <--|-----|--- (line exits the clip region on the left)
-			slice.Intersect(ax, ay, bx, by,am,bm k1)
+			slice.IntersectM(ax, ay,am, bx, by,bm, k1)
 			exited = true
 		}
 		if b > k2 && a <= k2 {
 			// |  ---|--> or ---|-----|--> (line exits the clip region on the right)
-			slice.Intersect(ax, ay, bx, by,am,bm, k2)
+			slice.IntersectM(ax, ay,am, bx, by,bm, k2)
 			exited = true
 		}
 
@@ -254,12 +256,13 @@ func (input *ClipGeom) clipLineM() {
 	// close the polygon if its endpoints are not the same after clipping
 	last = len(slice.Slice) - 3
 	if input.IsPolygon && last >= 3 && (slice.Slice[last] != slice.Slice[0] || slice.Slice[last+1] != slice.Slice[1]) {
-		slice.AddPointM(slice.Slice[0], slice.Slice[1], slice.Slice[2],slide.Slice[3])
+		slice.AddPointM(slice.Slice[0], slice.Slice[1], slice.Slice[2],slice.Slice[3])
 	}
 
 	if slice.Pos > 0 {
 		//fmt.Println(slice)
 		input.NewGeom = append(input.NewGeom, slice.Slice[:slice.Pos])
+		fmt.Println("here")
 	}
 
 }
@@ -279,17 +282,20 @@ func clipPoints(geometry []float64, k1, k2 float64, axis int) []float64 {
 }
 
 // clipping lines
-func clipLines(geom [][]float64, k1, k2 float64, axis int, IsPolygon bool) *ClipGeom {
+func clipLines(geom [][]float64, k1, k2 float64, axis int, IsPolygon bool,hasM bool) *ClipGeom {
 	clipthing := &ClipGeom{Geom: geom[0], K1: k1, K2: k2, Axis: axis, IsPolygon: IsPolygon}
 	for pos := range geom {
 		clipthing.Geom = geom[pos]
-		clipthing.clipLine()
-
+		if hasM {
+			clipthing.clipLineM()
+		} else {
+			clipthing.clipLine()
+		}
 	}
 	return clipthing
 }
 
-func (geometry *Geometry) Clip(k1 float64, k2 float64, axis int, ispolygon bool) (Geometry, bool) {
+func (geometry *Geometry) Clip(k1 float64, k2 float64, axis int, ispolygon bool,hasM bool) (Geometry, bool) {
 	switch geometry.Type {
 	case "Point":
 		geom := clipPoints(geometry.Point, k1, k2, axis)
@@ -307,17 +313,31 @@ func (geometry *Geometry) Clip(k1 float64, k2 float64, axis int, ispolygon bool)
 		}
 	case "LineString":
 		clipgeom := ClipGeom{K1: k1, K2: k2, Geom: geometry.LineString, Axis: axis, IsPolygon: false}
-		clipgeom.clipLine()
-		if len(clipgeom.NewGeom) > 0 {
-			if len(clipgeom.NewGeom) == 1 {
-				return Geometry{Type: "LineString", LineString: clipgeom.NewGeom[0]}, true
-			} else {
-				return Geometry{Type: "MultiLineString", MultiLineString: clipgeom.NewGeom}, true
+		if hasM {
+			clipgeom.clipLineM()
+			if len(clipgeom.NewGeom) > 0 {
+				fmt.Println("deereradfas")
+				fmt.Println(clipgeom.NewGeom)
+				if len(clipgeom.NewGeom) == 1 {
+					return Geometry{Type: "LineString", LineString: clipgeom.NewGeom[0]}, true
+				} else {
+					return Geometry{Type: "MultiLineString", MultiLineString: clipgeom.NewGeom}, true
+				}
+			}			
+		} else {
+			clipgeom.clipLine()
+			if len(clipgeom.NewGeom) > 0 {
+				if len(clipgeom.NewGeom) == 1 {
+					return Geometry{Type: "LineString", LineString: clipgeom.NewGeom[0]}, true
+				} else {
+					return Geometry{Type: "MultiLineString", MultiLineString: clipgeom.NewGeom}, true
+				}
 			}
 		}
+
 	case "MultiLineString":
 
-		clipgeom := clipLines(geometry.MultiLineString, k1, k2, axis, false)
+		clipgeom := clipLines(geometry.MultiLineString, k1, k2, axis, false,hasM)
 		if len(clipgeom.NewGeom) > 0 {
 			if len(clipgeom.NewGeom) == 1 {
 				return Geometry{Type: "LineString", LineString: clipgeom.NewGeom[0]}, true
@@ -326,14 +346,14 @@ func (geometry *Geometry) Clip(k1 float64, k2 float64, axis int, ispolygon bool)
 			}
 		}
 	case "Polygon":
-		clipgeom := clipLines(geometry.Polygon, k1, k2, axis, ispolygon)
+		clipgeom := clipLines(geometry.Polygon, k1, k2, axis, ispolygon,false)
 		if len(clipgeom.NewGeom) > 0 {
 			return Geometry{Type: "Polygon", Polygon: clipgeom.NewGeom}, true
 		}
 	case "MultiPolygon":
 		multipolygon := [][][]float64{}
 		for i := range geometry.MultiPolygon {
-			clipgeom := clipLines(geometry.MultiPolygon[i], k1, k2, axis, ispolygon)
+			clipgeom := clipLines(geometry.MultiPolygon[i], k1, k2, axis, ispolygon,false)
 			if len(clipgeom.NewGeom) > 0 {
 				multipolygon = append(multipolygon, clipgeom.NewGeom)
 			}
@@ -351,7 +371,7 @@ func (geometry *Geometry) Clip(k1 float64, k2 float64, axis int, ispolygon bool)
 }
 
 // clips features
-func clip(features []Feature, scale int, k1 float64, k2 float64, axis int, minAll float64, maxAll float64, options Config) []Feature {
+func clip(features []Feature, scale int, k1 float64, k2 float64, axis int, minAll float64, maxAll float64, options Config,hasM bool) []Feature {
 	k1 = k1 / float64(scale)
 	k2 = k2 / float64(scale)
 	if minAll >= k1 && maxAll < k2 {
@@ -380,10 +400,10 @@ func clip(features []Feature, scale int, k1 float64, k2 float64, axis int, minAl
 		}
 
 		if boolval {
-			clipgeom, _ := feature.Geometry.Clip(k1, k2, axis, feature.Type == "MultiPolygon" || feature.Type == "Polygon")
+			clipgeom, _ := feature.Geometry.Clip(k1, k2, axis, feature.Type == "MultiPolygon" || feature.Type == "Polygon",hasM)
 			boolval2 := (len(clipgeom.LineString) == 0) && (len(clipgeom.Point) == 0) && (len(clipgeom.Polygon) == 0) && (len(clipgeom.MultiLineString) == 0) && (len(clipgeom.MultiPoint) == 0) && (len(clipgeom.MultiPolygon) == 0)
 			if !boolval2 {
-				clipped = append(clipped, CreateFeature(feature.ID, clipgeom, feature.Tags))
+				clipped = append(clipped, CreateFeature(feature.ID, clipgeom, feature.Tags,options.HasM))
 			}
 		}
 	}
@@ -391,7 +411,7 @@ func clip(features []Feature, scale int, k1 float64, k2 float64, axis int, minAl
 }
 
 // clips features
-func clipcreate(features []Feature, scale int, k1 float64, k2 float64, axis int, minAll float64, maxAll float64, options Config, tileid m.TileID) Tile {
+func clipcreate(features []Feature, scale int, k1 float64, k2 float64, axis int, minAll float64, maxAll float64, options Config, tileid m.TileID,hasM bool) Tile {
 	tile := NewTile()
 	tile.TileID = tileid
 
@@ -423,7 +443,10 @@ func clipcreate(features []Feature, scale int, k1 float64, k2 float64, axis int,
 		}
 
 		if boolval {
-			clipgeom, _ := feature.Geometry.Clip(k1, k2, axis, feature.Type == "MultiPolygon" || feature.Type == "Polygon")
+				
+			clipgeom, _ := feature.Geometry.Clip(k1, k2, axis, feature.Type == "MultiPolygon" || feature.Type == "Polygon",hasM)
+			
+			
 			boolval2 := (len(clipgeom.LineString) == 0) && (len(clipgeom.Point) == 0) && (len(clipgeom.Polygon) == 0) && (len(clipgeom.MultiLineString) == 0) && (len(clipgeom.MultiPoint) == 0) && (len(clipgeom.MultiPolygon) == 0)
 			if !boolval2 {
 				//fmt.Println(clipgeom)
@@ -447,7 +470,7 @@ func clipcreate(features []Feature, scale int, k1 float64, k2 float64, axis int,
 				if maxY > tile.MaxY {
 					tile.MaxY = maxY
 				}
-				clipped = append(clipped, CreateFeature(feature.ID, clipgeom, feature.Tags))
+				clipped = append(clipped, CreateFeature(feature.ID, clipgeom, feature.Tags,options.HasM))
 			}
 
 		}

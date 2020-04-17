@@ -99,11 +99,11 @@ func wrap(features []Feature, options Config) []Feature {
 	buffer := options.Buffer / options.Extent
 	merged := features
 
-	left := clip(features, 1, float64(-1.0-buffer), float64(buffer), 0, -1, 2, options)     // left world copy
-	right := clip(features, 1, float64(1.0-buffer), float64(2.0+buffer), 0, -1, 2, options) // right world copy
+	left := clip(features, 1, float64(-1.0-buffer), float64(buffer), 0, -1, 2, options,options.HasM)     // left world copy
+	right := clip(features, 1, float64(1.0-buffer), float64(2.0+buffer), 0, -1, 2, options,options.HasM) // right world copy
 
 	if len(left) > 0 || len(right) > 0 {
-		merged = clip(features, 1, float64(-buffer), float64(1.0+buffer), 0, -1, 2, options) // center world copy
+		merged = clip(features, 1, float64(-buffer), float64(1.0+buffer), 0, -1, 2, options,options.HasM) // center world copy
 		if len(left) > 0 {
 			merged = append(merged, shiftFeatureCoords(left, float64(1))...)
 		}
@@ -189,7 +189,7 @@ func convertLine(ring [][]float64, tolerance float64, isPolygon bool) []float64 
 func convertLineM(ring [][]float64, tolerance float64, isPolygon bool) []float64 {
 	var x0, y0 float64
 	size := 0.0
-	out := NewSlice(len(ring)*3, 0)
+	out := NewSlice(len(ring)*4, 0)
 	for j := 0; j < len(ring); j++ {
 		x := projectX(ring[j][0])
 		y := projectY(ring[j][1])
@@ -249,7 +249,7 @@ func convertLines(rings [][][]float64, tolerance float64, isPolygon bool) [][]fl
 	out := make([][]float64, len(rings))
 	for pos, ring := range rings {
 		if len(ring[0]) == 3 {
-			out[pos] = converLineM(ring,tolerance,isPolygon)
+			out[pos] = convertLineM(ring,tolerance,isPolygon)
 		} else {
 			out[pos] = convertLine(ring, tolerance, isPolygon)
 		}
@@ -278,10 +278,15 @@ func ConvertFeature(feature *geojson.Feature, options Config) Feature {
 			geometry.MultiPoint[pos*3+2] = 0.0
 		}
 	case "LineString":
-		geometry = Geometry{LineString: convertLine(feature.Geometry.LineString, tolerance, false), Type: "LineString"}
+		if options.HasM {
+			geometry = Geometry{LineString: convertLineM(feature.Geometry.LineString, tolerance, false), Type: "LineString"}
+		} else {
+			geometry = Geometry{LineString: convertLine(feature.Geometry.LineString, tolerance, false), Type: "LineString"}
+		}
+			
 	case "MultiLineString":
-		geometry = Geometry{MultiLineString: convertLines(feature.Geometry.MultiLineString, tolerance, false), Type: "MultiLineString"}
 
+		geometry = Geometry{MultiLineString: convertLines(feature.Geometry.MultiLineString, tolerance, false), Type: "MultiLineString"}
 	case "Polygon":
 		geometry = Geometry{Polygon: convertLines(feature.Geometry.Polygon, tolerance, true), Type: "Polygon"}
 
@@ -295,10 +300,10 @@ func ConvertFeature(feature *geojson.Feature, options Config) Feature {
 
 	}
 	if options.PropertiesBool {
-		return CreateFeature(feature.ID, geometry, feature.Properties)
+		return CreateFeature(feature.ID, geometry, feature.Properties,options.HasM)
 	}
 
-	return CreateFeature(feature.ID, geometry, feature.Properties)
+	return CreateFeature(feature.ID, geometry, feature.Properties,options.HasM)
 
 }
 

@@ -21,6 +21,7 @@ type Config struct {
 	Debug          int
 	MaxFeatures    int
 	PropertiesBool bool
+	HasM		   bool
 }
 
 // instantiates a new config
@@ -60,15 +61,17 @@ type Feature struct {
 	MaxX     float64
 	MinY     float64
 	MaxY     float64
+	HasM 	 bool
 }
 
 // creates a feature
-func CreateFeature(id interface{}, geom Geometry, tags map[string]interface{}) Feature {
+func CreateFeature(id interface{}, geom Geometry, tags map[string]interface{},hasM bool) Feature {
 	feature := Feature{
 		ID:       id,
 		Geometry: geom,
 		Type:     geom.Type,
 		Tags:     tags,
+		HasM:hasM,
 	}
 	feature.calcBBox()
 	return feature
@@ -103,11 +106,20 @@ func (feature *Feature) calcBBox() {
 }
 
 func (feature *Feature) calcLineBBox(line []float64) {
-	for i := 0; i < len(line); i += 3 {
-		feature.MinX = math.Min(feature.MinX, line[i])
-		feature.MinY = math.Min(feature.MinY, line[i+1])
-		feature.MaxX = math.Max(feature.MaxX, line[i])
-		feature.MaxY = math.Max(feature.MaxY, line[i+1])
+	if feature.HasM {
+		for i := 0; i < len(line); i += 4 {
+			feature.MinX = math.Min(feature.MinX, line[i])
+			feature.MinY = math.Min(feature.MinY, line[i+1])
+			feature.MaxX = math.Max(feature.MaxX, line[i])
+			feature.MaxY = math.Max(feature.MaxY, line[i+1])
+		}
+	} else {
+		for i := 0; i < len(line); i += 3 {
+			feature.MinX = math.Min(feature.MinX, line[i])
+			feature.MinY = math.Min(feature.MinY, line[i+1])
+			feature.MaxX = math.Max(feature.MaxX, line[i])
+			feature.MaxY = math.Max(feature.MaxY, line[i+1])
+		}
 	}
 }
 
@@ -128,10 +140,10 @@ func (tile Tile) SplitTileChildren() map[m.TileID]Tile {
 	chanr := make(chan []Feature, 1)
 
 	clipcon := func(x chan []Feature, features []Feature, k1, k2 float64, min, max float64, yint int) {
-		x <- clip(features, z2, k1, k2, yint, min, max, tile.Options)
+		x <- clip(features, z2, k1, k2, yint, min, max, tile.Options,tile.Options.HasM)
 	}
 	clipcontile := func(x chan Tile, features []Feature, k1, k2 float64, min, max float64, yint int, tileid m.TileID) {
-		x <- clipcreate(features, z2, k1, k2, yint, min, max, tile.Options, tileid)
+		x <- clipcreate(features, z2, k1, k2, yint, min, max, tile.Options, tileid,tile.Options.HasM)
 	}
 
 	tilemap := map[m.TileID]Tile{}

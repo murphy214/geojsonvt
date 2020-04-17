@@ -116,7 +116,7 @@ func (tile Tile) Marshal() []byte {
 			geomtype = 1
 
 		} else if feature.Type == "LineString" {
-			simplified = tile.addLine(feature.Geometry.LineString, tolerance, false, false, extent, z2, tx, ty)
+			simplified = tile.addLine(feature.Geometry.LineString, tolerance, false,tile.Options.HasM, false, extent, z2, tx, ty)
 			if len(simplified) > 1 {
 				layerwrite.Cursor.MakeLine(simplified)
 			}
@@ -125,7 +125,7 @@ func (tile Tile) Marshal() []byte {
 		} else if feature.Type == "MultiLineString" {
 			newlist := make([][][]int32, len(feature.Geometry.MultiLineString))
 			for pos, i := range feature.Geometry.MultiLineString {
-				newlist[pos] = tile.addLine(i, tolerance, false, false, extent, z2, tx, ty)
+				newlist[pos] = tile.addLine(i, tolerance, false, tile.Options.HasM,false, extent, z2, tx, ty)
 			}
 			if len(newlist) > 0 {
 				/*
@@ -155,7 +155,7 @@ func (tile Tile) Marshal() []byte {
 		} else if feature.Type == "Polygon" {
 			newlist := make([][][]int32, len(feature.Geometry.Polygon))
 			for pos, i := range feature.Geometry.Polygon {
-				newlist[pos] = tile.addLine(i, tolerance, true, pos == 0, extent, z2, tx, ty)
+				newlist[pos] = tile.addLine(i, tolerance, true,false, pos == 0, extent, z2, tx, ty)
 			}
 			if len(newlist) > 0 {
 				layerwrite.Cursor.MakePolygon(newlist)
@@ -165,7 +165,7 @@ func (tile Tile) Marshal() []byte {
 			newlist := make([][][][]int32, len(feature.Geometry.MultiPolygon))
 			for i := range feature.Geometry.MultiPolygon {
 				for j := range feature.Geometry.MultiPolygon[i] {
-					newlist[i][j] = tile.addLine(feature.Geometry.MultiPolygon[i][j], tolerance, true, j == 0, extent, z2, tx, ty)
+					newlist[i][j] = tile.addLine(feature.Geometry.MultiPolygon[i][j], tolerance, true,false, j == 0, extent, z2, tx, ty)
 				}
 			}
 			if len(newlist) > 0 {
@@ -201,6 +201,7 @@ func (tile Tile) AddFeature(feature Feature) {
 	simplified := [][]int32{}
 	extent := float64(tile.Options.Extent)
 	var geomtype int
+	fmt.Println(feature)
 	if feature.Type == "Point" {
 		simplified = append(simplified, transformPoint(feature.Geometry.Point[0], feature.Geometry.Point[1], extent, z2, tx, ty))
 		tile.NumPoints++
@@ -221,8 +222,9 @@ func (tile Tile) AddFeature(feature Feature) {
 		geomtype = 1
 
 	} else if feature.Type == "LineString" {
-		simplified = tile.addLine(feature.Geometry.LineString, tolerance, false, false, extent, z2, tx, ty)
+		simplified = tile.addLine(feature.Geometry.LineString, tolerance, false,tile.Options.HasM, false, extent, z2, tx, ty)
 		if len(simplified) > 1 {
+			fmt.Println(simplified)
 			tile.LayerWrite.Cursor.MakeLine(simplified)
 		}
 		geomtype = 2
@@ -230,7 +232,7 @@ func (tile Tile) AddFeature(feature Feature) {
 	} else if feature.Type == "MultiLineString" {
 		newlist := make([][][]int32, len(feature.Geometry.MultiLineString))
 		for pos, i := range feature.Geometry.MultiLineString {
-			newlist[pos] = tile.addLine(i, tolerance, false, false, extent, z2, tx, ty)
+			newlist[pos] = tile.addLine(i, tolerance, false,tile.Options.HasM, false, extent, z2, tx, ty)
 		}
 		if len(newlist) > 0 {
 			tile.LayerWrite.Cursor.MakeMultiLine(newlist)
@@ -239,7 +241,7 @@ func (tile Tile) AddFeature(feature Feature) {
 	} else if feature.Type == "Polygon" {
 		newlist := make([][][]int32, len(feature.Geometry.Polygon))
 		for pos, i := range feature.Geometry.Polygon {
-			newlist[pos] = tile.addLine(i, tolerance, true, pos == 0, extent, z2, tx, ty)
+			newlist[pos] = tile.addLine(i, tolerance, true,false, pos == 0, extent, z2, tx, ty)
 		}
 		if len(newlist) > 0 {
 			tile.LayerWrite.Cursor.MakePolygon(newlist)
@@ -251,7 +253,7 @@ func (tile Tile) AddFeature(feature Feature) {
 		newlist := make([][][][]int32, len(feature.Geometry.MultiPolygon))
 		for i := range feature.Geometry.MultiPolygon {
 			for j := range feature.Geometry.MultiPolygon[i] {
-				newlist[i][j] = tile.addLine(feature.Geometry.MultiPolygon[i][j], tolerance, true, j == 0, extent, z2, tx, ty)
+				newlist[i][j] = tile.addLine(feature.Geometry.MultiPolygon[i][j], tolerance, true,false, j == 0, extent, z2, tx, ty)
 			}
 		}
 		if len(newlist) > 0 {
@@ -270,22 +272,36 @@ func (tile Tile) AddFeature(feature Feature) {
 		}
 	}
 	if len(tile.LayerWrite.Cursor.Geometry) > 0 && tile.LayerWrite.Cursor.Count != 0 {
+		
 		tile.LayerWrite.AddFeatureRaw(id, geomtype, tile.LayerWrite.Cursor.Geometry, feature.Tags)
 	}
 }
 
-func (tile *Tile) addLine(geom []float64, tolerance float64, isPolygon bool, isOuter bool, extent, z2, x, y float64) [][]int32 {
+func (tile *Tile) addLine(geom []float64, tolerance float64, isPolygon bool,isM bool, isOuter bool, extent, z2, x, y float64) [][]int32 {
 	var sqTolerance = tolerance * tolerance
 	if isPolygon {
 		tolerance = sqTolerance
 	}
 	ring := [][]int32{}
-	for i := 0; i < len(geom); i += 3 {
-		if tolerance == 0 || geom[i+2] > sqTolerance {
-			tile.NumSimplified++
-			ring = append(ring, transformPoint(geom[i], geom[i+1], extent, z2, x, y))
+
+	if isM {
+		ring := [][]int32{}
+		for i := 0; i < len(geom); i += 4 {
+			if tolerance == 0 || geom[i+3] > sqTolerance {
+				tile.NumSimplified++
+				ring = append(ring, transformPoint(geom[i], geom[i+1], extent, z2, x, y))
+			}
+			tile.NumPoints++
 		}
-		tile.NumPoints++
+	} else {
+		ring := [][]int32{}
+		for i := 0; i < len(geom); i += 3 {
+			if tolerance == 0 || geom[i+2] > sqTolerance {
+				tile.NumSimplified++
+				ring = append(ring, transformPoint(geom[i], geom[i+1], extent, z2, x, y))
+			}
+			tile.NumPoints++
+		}
 	}
 
 	if isPolygon {
