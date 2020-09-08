@@ -7,6 +7,7 @@ package geojsonvt
 import (
 	"github.com/paulmach/go.geojson"
 	"math"
+	"fmt"
 )
 
 func Round(val float64, roundOn float64, places int) (newVal float64) {
@@ -193,8 +194,8 @@ func convertLineM(ring [][]float64, tolerance float64, isPolygon bool) []float64
 	for j := 0; j < len(ring); j++ {
 		x := projectX(ring[j][0])
 		y := projectY(ring[j][1])
-		z := ring[j][2]
-		out.AddPointM(x, y, z, 0)
+		m := ring[j][2]
+		out.AddPointM(x, y, m, 0)
 
 		if j > 0 {
 			if isPolygon {
@@ -279,6 +280,7 @@ func ConvertFeature(feature *geojson.Feature, options Config) Feature {
 		}
 	case "LineString":
 		if options.HasM {
+			fmt.Println("hasm",options.HasM)
 			geometry = Geometry{LineString: convertLineM(feature.Geometry.LineString, tolerance, false), Type: "LineString"}
 		} else {
 			geometry = Geometry{LineString: convertLine(feature.Geometry.LineString, tolerance, false), Type: "LineString"}

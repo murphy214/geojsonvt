@@ -2,7 +2,6 @@ package geojsonvt
 
 import (
 	m "github.com/murphy214/mercantile"
-	"fmt"
 )
 
 type ClipGeom struct {
@@ -262,7 +261,7 @@ func (input *ClipGeom) clipLineM() {
 	if slice.Pos > 0 {
 		//fmt.Println(slice)
 		input.NewGeom = append(input.NewGeom, slice.Slice[:slice.Pos])
-		fmt.Println("here")
+		//fmt.Println("here")
 	}
 
 }
@@ -316,8 +315,22 @@ func (geometry *Geometry) Clip(k1 float64, k2 float64, axis int, ispolygon bool,
 		if hasM {
 			clipgeom.clipLineM()
 			if len(clipgeom.NewGeom) > 0 {
-				fmt.Println("deereradfas")
-				fmt.Println(clipgeom.NewGeom)
+				//fmt.Println("deereradfas")
+				//fmt.Println(clipgeom.NewGeom)
+				
+				/*
+				for _,val := range clipgeom.NewGeom {
+					lasti := 0
+					for i := 4; i < len(val); i+=4 {
+						//fmt.Println(val[lasti:i],val[lasti:i][2])
+						lasti = i
+						if i%3==0 {
+							//fmt.Println(vall)
+						}
+					}
+					fmt.Println(lasti)
+				}
+				*/
 				if len(clipgeom.NewGeom) == 1 {
 					return Geometry{Type: "LineString", LineString: clipgeom.NewGeom[0]}, true
 				} else {

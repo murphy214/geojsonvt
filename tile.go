@@ -116,6 +116,7 @@ func (tile Tile) Marshal() []byte {
 			geomtype = 1
 
 		} else if feature.Type == "LineString" {
+			fmt.Println(tile.Options.HasM," has m")
 			simplified = tile.addLine(feature.Geometry.LineString, tolerance, false,tile.Options.HasM, false, extent, z2, tx, ty)
 			if len(simplified) > 1 {
 				layerwrite.Cursor.MakeLine(simplified)
@@ -222,6 +223,7 @@ func (tile Tile) AddFeature(feature Feature) {
 		geomtype = 1
 
 	} else if feature.Type == "LineString" {
+		fmt.Println(tile.Options.HasM,"has m ")
 		simplified = tile.addLine(feature.Geometry.LineString, tolerance, false,tile.Options.HasM, false, extent, z2, tx, ty)
 		if len(simplified) > 1 {
 			fmt.Println(simplified)

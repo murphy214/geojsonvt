@@ -4,6 +4,9 @@ import (
 	m "github.com/murphy214/mercantile"
 	"github.com/paulmach/go.geojson"
 	"math"
+	"fmt"
+	"strings"
+	"encoding/json"
 )
 
 /*
@@ -66,14 +69,58 @@ type Feature struct {
 
 // creates a feature
 func CreateFeature(id interface{}, geom Geometry, tags map[string]interface{},hasM bool) Feature {
-	feature := Feature{
-		ID:       id,
-		Geometry: geom,
-		Type:     geom.Type,
-		Tags:     tags,
-		HasM:hasM,
+	var feature Feature
+	if hasM&&geom.Type=="LineString" {
+		val := geom.LineString
+		lasti := 0
+		mydists := make([]float64,len(val)/4)
+		for i := 4; i < len(val); i+=4  {
+			dist := val[lasti:i][2]
+			mydists[lasti/4] = dist
+			lasti = i
+		}
+		mydists[len(val)/4-1] = val[len(val)-2]
+		newtags := map[string]interface{}{}
+		for k,v := range tags {
+			newtags[k] = v
+		}
+
+		newtags["DISTS"] = WriteDistances(mydists)
+		feature = Feature{
+			ID:       id,
+			Geometry: geom,
+			Type:     geom.Type,
+			Tags:     newtags,
+			HasM:hasM,
+		}
+	} else {
+		feature = Feature{
+			ID:       id,
+			Geometry: geom,
+			Type:     geom.Type,
+			Tags:     tags,
+			HasM:hasM,
+		}
 	}
+
 	feature.calcBBox()
+	/*
+	if feature.HasM&&feature.Geometry.Type=="LineString" {
+		val := feature.Geometry.LineString
+		lasti := 0
+		mydists := make([]float64,len(val)/4)
+		for i := 4; i < len(val); i+=4  {
+			dist := val[lasti:i][2]
+			mydists[lasti/4] = dist
+			lasti = i
+		}
+		mydists[len(val)/4-1] = val[len(val)-2]
+		
+		feature.Tags["DISTS"] = WriteDistances(mydists)
+	}
+	*/
+
+
 	return feature
 }
 
@@ -242,4 +289,23 @@ func TileFromGeoJSON(geojsonfeatures []*geojson.Feature, tileid m.TileID, option
 	tile.Source = features
 	tile.Options = options
 	return tile.SplitTileChildren()[tileid]
+}
+
+// reads the distances for a given line
+func ReadDistances(val interface{}) []float64 {
+	valstring := val.(string)
+	var m []float64
+	err := json.Unmarshal([]byte(valstring), &m)
+	if err != nil {
+		fmt.Println(err,valstring,"error distances")
+	}
+	return m
+}
+
+func WriteDistances(vals []float64) string {
+	mine := []string{}
+	for _,i := range vals {
+		mine = append(mine,fmt.Sprintf("%f",i))
+	}
+	return fmt.Sprintf("[%s]",strings.Join(mine,","))
 }
