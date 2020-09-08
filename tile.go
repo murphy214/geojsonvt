@@ -110,13 +110,13 @@ func (tile Tile) Marshal() []byte {
 				tile.NumSimplified++
 			}
 			if len(simplified) > 0 {
+				
 				layerwrite.Cursor.MakeMultiPoint(simplified)
 			}
 
 			geomtype = 1
 
 		} else if feature.Type == "LineString" {
-			fmt.Println(tile.Options.HasM," has m")
 			simplified = tile.addLine(feature.Geometry.LineString, tolerance, false,tile.Options.HasM, false, extent, z2, tx, ty)
 			if len(simplified) > 1 {
 				layerwrite.Cursor.MakeLine(simplified)
@@ -223,7 +223,6 @@ func (tile Tile) AddFeature(feature Feature) {
 		geomtype = 1
 
 	} else if feature.Type == "LineString" {
-		fmt.Println(tile.Options.HasM,"has m ")
 		simplified = tile.addLine(feature.Geometry.LineString, tolerance, false,tile.Options.HasM, false, extent, z2, tx, ty)
 		if len(simplified) > 1 {
 			fmt.Println(simplified)
@@ -287,7 +286,6 @@ func (tile *Tile) addLine(geom []float64, tolerance float64, isPolygon bool,isM 
 	ring := [][]int32{}
 
 	if isM {
-		ring := [][]int32{}
 		for i := 0; i < len(geom); i += 4 {
 			if tolerance == 0 || geom[i+3] > sqTolerance {
 				tile.NumSimplified++
@@ -296,7 +294,6 @@ func (tile *Tile) addLine(geom []float64, tolerance float64, isPolygon bool,isM 
 			tile.NumPoints++
 		}
 	} else {
-		ring := [][]int32{}
 		for i := 0; i < len(geom); i += 3 {
 			if tolerance == 0 || geom[i+2] > sqTolerance {
 				tile.NumSimplified++

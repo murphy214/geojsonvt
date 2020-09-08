@@ -305,7 +305,7 @@ func ReadDistances(val interface{}) []float64 {
 func WriteDistances(vals []float64) string {
 	mine := []string{}
 	for _,i := range vals {
-		mine = append(mine,fmt.Sprintf("%f",i))
+		mine = append(mine,strings.Replace(fmt.Sprintf("%2.4f",i)," ","",-1))
 	}
 	return fmt.Sprintf("[%s]",strings.Join(mine,","))
 }
