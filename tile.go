@@ -160,6 +160,7 @@ func (tile Tile) Marshal() []byte {
 				}
 				if len(newlist2) > 0{
 					feature.Tags = updateMultiDists(feature.Tags,newlistdist2)
+					//fmt.Println(feature,"multiline")
 					layerwrite.Cursor.MakeMultiLine(newlist2)
 				}
 

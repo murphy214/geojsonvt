@@ -55,6 +55,7 @@ func (slice *Slice) IntersectXM(ax, ay,am, bx, by,bm, x float64) float64 {
 
 func (slice *Slice) IntersectYM(ax, ay,am, bx, by,bm, y float64) float64 {
 	t := (y - ay) / (by - ay)
+		
 	slice.Slice[slice.Pos] = ax + (bx-ax)*t
 	slice.Slice[slice.Pos+1] = y
 	slice.Slice[slice.Pos+2] = am + (bm-am)*t
