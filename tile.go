@@ -5,6 +5,7 @@ import (
 	m "github.com/murphy214/mercantile"
 	"github.com/murphy214/vector-tile-go"
 	"reflect"
+	"strings"
 )
 
 type Tile struct {
@@ -22,6 +23,7 @@ type Tile struct {
 	MaxY          float64
 	Options       Config
 	Tolerance     float64
+	currentDist []float64
 }
 
 func NewTile() Tile {
@@ -121,13 +123,20 @@ func (tile Tile) Marshal() []byte {
 			if len(simplified) > 1 {
 				layerwrite.Cursor.MakeLine(simplified)
 			}
-			geomtype = 2
+			if (tile.Options.HasM) {
+				feature.Tags = updateDist(feature.Tags,tile.currentDist)
+			}
 
+			geomtype = 2
 		} else if feature.Type == "MultiLineString" {
 			newlist := make([][][]int32, len(feature.Geometry.MultiLineString))
+			newlistdist := make([][]float64, len(feature.Geometry.MultiLineString))
 			for pos, i := range feature.Geometry.MultiLineString {
 				newlist[pos] = tile.addLine(i, tolerance, false, tile.Options.HasM,false, extent, z2, tx, ty)
+				newlistdist[pos] = tile.currentDist
 			}
+
+
 			if len(newlist) > 0 {
 				/*
 				boolval := false
@@ -141,14 +150,17 @@ func (tile Tile) Marshal() []byte {
 				}
 				*/
 				newlist2 := [][][]int32{}
-				for _,i := range newlist {
+				newlistdist2 := [][]float64{}
+				for pos,i := range newlist {
 					if len(i) > 2 {
 						newlist2 = append(newlist2,i)
+						newlistdist2 = append(newlistdist2,newlistdist[pos])
 					}
+
 				}
 				if len(newlist2) > 0{
+					feature.Tags = updateMultiDists(feature.Tags,newlistdist2)
 					layerwrite.Cursor.MakeMultiLine(newlist2)
-
 				}
 
 			}
@@ -193,6 +205,39 @@ func (tile Tile) Marshal() []byte {
 	return layerwrite.Flush()
 }
 
+func updateDist(tags map[string]interface{},dists []float64) map[string]interface{} {
+	newtags := map[string]interface{}{}
+	for k,v := range tags {
+		if k!="DISTS" {
+			newtags[k] = v
+		}
+	}
+	newtags["DISTS"] = WriteDistances(dists)
+	//WWfmt.Println(newtags)
+	return newtags
+}
+
+
+func updateMultiDists(tags map[string]interface{},dists [][]float64) map[string]interface{} {
+	newtags := map[string]interface{}{}
+	for k,v := range tags {
+		if k!="DISTS" {
+			newtags[k] = v
+		}
+	}
+	newlist := []string{}
+	for _,dist := range dists {
+		newlist = append(newlist,WriteDistances(dist))
+	}
+
+	mydist := fmt.Sprintf("[%s]",strings.Join(newlist,","))
+
+	newtags["DISTS"] = mydist
+	//WWfmt.Println(newtags)
+	return newtags
+}
+
+
 func (tile Tile) AddFeature(feature Feature) {
 	tolerance := tile.Tolerance
 	tile.LayerWrite.RefreshCursor()
@@ -224,6 +269,9 @@ func (tile Tile) AddFeature(feature Feature) {
 
 	} else if feature.Type == "LineString" {
 		simplified = tile.addLine(feature.Geometry.LineString, tolerance, false,tile.Options.HasM, false, extent, z2, tx, ty)
+		if (tile.Options.HasM) {
+			feature.Tags = updateDist(feature.Tags,tile.currentDist)
+		}
 		if len(simplified) > 1 {
 			fmt.Println(simplified)
 			tile.LayerWrite.Cursor.MakeLine(simplified)
@@ -232,10 +280,19 @@ func (tile Tile) AddFeature(feature Feature) {
 
 	} else if feature.Type == "MultiLineString" {
 		newlist := make([][][]int32, len(feature.Geometry.MultiLineString))
+		newlistdist := make([][]float64, len(feature.Geometry.MultiLineString))
 		for pos, i := range feature.Geometry.MultiLineString {
 			newlist[pos] = tile.addLine(i, tolerance, false,tile.Options.HasM, false, extent, z2, tx, ty)
+			if (tile.Options.HasM) {
+				newlistdist[pos] = tile.currentDist
+			}
+		}
+		if (tile.Options.HasM) {
+			fmt.Println(newlistdist,"newlistdist")
 		}
 		if len(newlist) > 0 {
+			feature.Tags = updateMultiDists(feature.Tags,newlistdist)
+
 			tile.LayerWrite.Cursor.MakeMultiLine(newlist)
 		}
 		geomtype = 2
@@ -284,15 +341,18 @@ func (tile *Tile) addLine(geom []float64, tolerance float64, isPolygon bool,isM 
 		tolerance = sqTolerance
 	}
 	ring := [][]int32{}
-
+	dists := []float64{}
 	if isM {
 		for i := 0; i < len(geom); i += 4 {
 			if tolerance == 0 || geom[i+3] > sqTolerance {
 				tile.NumSimplified++
 				ring = append(ring, transformPoint(geom[i], geom[i+1], extent, z2, x, y))
+				dists = append(dists,geom[i+2])
 			}
-			tile.NumPoints++
+			tile.NumPoints++	
 		}
+		tile.currentDist = dists
+
 	} else {
 		for i := 0; i < len(geom); i += 3 {
 			if tolerance == 0 || geom[i+2] > sqTolerance {
